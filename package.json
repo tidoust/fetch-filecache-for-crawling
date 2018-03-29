@@ -1,0 +1,27 @@
+{
+  "name": "fetch-filecache-for-crawling",
+  "version": "0.1.0",
+  "description": "Implementation of a `fetch` that extends the implementation from `node-fetch` to add an HTTP cache using a local cache folder for crawling purpose.",
+  "main": "fetch-filecache.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tidoust/fetch-filecache-for-crawling.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tidoust/fetch-filecache-for-crawling/issues"
+  },
+  "author": {
+    "name": "tidoust",
+    "email": "fd@tidoust.net"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=8.0.0"
+  },
+  "dependencies": {
+    "filenamify-url": "^1.0.0",
+    "node-fetch": "^2.1.2",
+    "promisify-require": "^0.1.0",
+    "rimraf": "^2.6.2"
+  }
+}
