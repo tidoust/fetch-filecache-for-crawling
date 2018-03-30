@@ -10,12 +10,13 @@ const filenamify = require('filenamify-url');
 const baseFetch = require('node-fetch');
 const Response = require('node-fetch').Response;
 const rimraf = require('rimraf');
+const path = require('path');
 const promisifyRequire = require('promisify-require');
 const fs = promisifyRequire('fs');
 
 let globalConfig = null;
 try {
-  globalConfig = require('./config.json');
+  globalConfig = require(path.resolve('config.json'));
 }
 catch (e) {
   globalConfig = {};
@@ -112,17 +113,41 @@ async function fetch(url, options) {
     }
   }
 
-  function checkPendingFetch() {
+  async function getPendingFetch() {
     if (pendingFetches[url]) {
-      return pendingFetches[url];
+      log('wait for pending request');
+      return pendingFetches[url].promise;
     }
     else {
-      return;
+      return false;
     }
   }
 
-  function addPendingFetch(url, promise) {
-    pendingFetches[url] = promise;
+  /**
+   * Create a pending fetch promise and keep controls over that promise so that
+   * the code may resolve or reject it through calls to resolvePendingFetch and
+   * rejectPendingFetch functions
+   */
+  function addPendingFetch(url) {
+    let resolve = null;
+    let reject = null;
+    let promise = new Promise((innerResolve, innerReject) => {
+      resolve = innerResolve;
+      reject = innerReject;
+    });
+    pendingFetches[url] = { promise, resolve, reject };
+  }
+
+  function resolvePendingFetch(url) {
+    if (!pendingFetches[url]) return;
+    pendingFetches[url].resolve(true);
+    delete pendingFetches[url];
+  }
+
+  function rejectPendingFetch(url, err) {
+    if (!pendingFetches[url]) return;
+    pendingFetches[url].reject(err);
+    delete pendingFetches[url];
   }
 
   async function readHeadersFromCache() {
@@ -218,36 +243,27 @@ async function fetch(url, options) {
 
   log('fetch ' + url);
   await checkCacheFolder();
-  let pendingFetch = checkPendingFetch();
-  if (pendingFetch) {
-    // Wait for pending fetch to finish, we'll reuse the cached answer
-    // (unless something went wrong)
-    log('wait for pending request');
-    return pendingFetch
-      .then(_ => log('pending request over, return response from cache'))
-      .then(readFromCache);
+  let pendingFetchWasOngoing = await getPendingFetch();
+  if (pendingFetchWasOngoing) {
+    // There was a pending fetch, reuse the cached answer
+    // (NB: we would not be able to reuse the Response object directly because
+    // response body stream can only be read once)
+    log('pending request over, return response from cache');
+    return readFromCache();
   }
   else {
-    let resolvePendingFetch = null;
-    let rejectPendingFetch = null;
-    pendingFetch = new Promise((resolve, reject) => {
-      resolvePendingFetch = resolve;
-      rejectPendingFetch = reject;
-    });
-    addPendingFetch(url, pendingFetch);
-
-    return readHeadersFromCache()
-      .then(conditionalFetch)
-      .then(response => {
-        fetchedUrls[config.cacheFolder][url] = true;
-        delete pendingFetches[url];    
-        resolvePendingFetch();
-        return response;
-      })
-      .catch(err => {
-        rejectPendingFetch();
-        throw err;
-      });
+    addPendingFetch(url);
+    try {
+      let headers = await readHeadersFromCache();
+      let response = await conditionalFetch(headers);
+      fetchedUrls[config.cacheFolder][url] = true;
+      resolvePendingFetch(url);
+      return response;
+    }
+    catch (err) {
+      rejectPendingFetch(url, err);
+      throw err;
+    }
   }
 }
 
