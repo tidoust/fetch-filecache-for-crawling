@@ -49,7 +49,7 @@ Promise.all(urls.map(url =>
 On top of usual `fetch` options, the following optional parameters can be
 passed to `fetch` in the `options` parameter to change default behavior:
 
-- `cacheFolder`: the name of the cache folder to use. By default, the code caches all files in a folder named `cache`.
+- `cacheFolder`: the name of the cache folder to use. By default, the code caches all files in a folder named `.cache`.
 - `resetCache`: set to `true` to empty the cache folder when the application starts. Defaults to `false`. Note that the cache folder will only be reset once, regardless of whether the parameter is set to `true` in subsequent calls to `fetch`.
 - `avoidNetworkRequests`: set to `true` to consider that responses in the cache folder are always valid when they exist. Defaults to `false`, which means that the method will send a conditional HTTP request to check whether the response in the cache is still valid.
 - `logToConsole`: set to `true` to output progress messages to the console. Defaults to `false`. All messages start with the ID of the request to be able to distinguish between them.

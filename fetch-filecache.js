@@ -55,8 +55,6 @@ let counter = 0;
  * @return {Promise<Response>} The promise to get an HTTP response
  */
 async function fetch(url, options) {
-  const cacheFilename = 'cache/' + filenamify(url);
-  const cacheHeadersFilename = cacheFilename + '.headers';
   options = options || {};
 
   // Increment request counter and save it locally for logging purpose
@@ -66,7 +64,7 @@ async function fetch(url, options) {
   // Specific parameters given in `options` override possible settings read
   // from the `config.json` file.
   const config = {
-    cacheFolder: options.cacheFolder || globalConfig.cacheFolder || 'cache',
+    cacheFolder: options.cacheFolder || globalConfig.cacheFolder || '.cache',
     resetCache: options.hasOwnProperty('resetCache') ?
       options.resetCache :
       globalConfig.resetCache || false,
@@ -77,6 +75,9 @@ async function fetch(url, options) {
       options.logToConsole :
       globalConfig.logToConsole || false
   };
+
+  const cacheFilename = path.join(config.cacheFolder, filenamify(url));
+  const cacheHeadersFilename = cacheFilename + '.headers';
 
   if (config.resetCache && !cacheFolderReset[config.cacheFolder]) {
     cacheFolderReset[config.cacheFolder] = true;
@@ -180,7 +181,7 @@ async function fetch(url, options) {
       return;
     }
 
-    log('save response to cache');
+    log('fetch and save response to cache');
     const headers = {};
     response.headers.forEach((value, header) => headers[header] = value);
     await fs.writeFile(
