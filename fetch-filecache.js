@@ -192,8 +192,8 @@ async function fetch(url, options) {
   async function readFromCache() {
     let data = await fs.readFile(cacheHeadersFilename, 'utf8');
     let headers = JSON.parse(data);
-    data = await fs.readFile(cacheFilename, 'utf8');
-    return new Response(data, {
+    let readable = fs.createReadStream(cacheFilename);
+    return new Response(readable, {
       url,
       status: 200,
       headers
@@ -208,11 +208,17 @@ async function fetch(url, options) {
     }
 
     log('fetch and save response to cache');
-    const headers = {};
-    response.headers.forEach((value, header) => headers[header] = value);
-    let data = await response.text();
-    await fs.writeFile(cacheFilename, data, 'utf8');
-    await fs.writeFile(cacheHeadersFilename, JSON.stringify(headers, null, 2), 'utf8');
+    return new Promise((resolve, reject) => {
+      let writable = fs.createWriteStream(cacheFilename);
+      writable.on('close', _ => {
+        let headers = {};
+        response.headers.forEach((value, header) => headers[header] = value);
+        fs.writeFile(cacheHeadersFilename, JSON.stringify(headers, null, 2), 'utf8')
+          .then(resolve).catch(reject);
+      });
+      writable.on('error', reject);
+      response.body.pipe(writable);
+    });
   }
 
   async function conditionalFetch(prevHeaders) {
