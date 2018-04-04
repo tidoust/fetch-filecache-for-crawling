@@ -68,6 +68,19 @@ function filenamify(url) {
 
 
 /**
+ * Sleep during the provided number of ms
+ *
+ * @function
+ * @param {Number} ms Number of milliseconds to sleep
+ * @return {Promise} promise to sleep during the provided number of ms
+ */
+async function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+
+
+/**
  * Wrapper around the baseFetch function that returns the response from the
  * local cache if one is found.
  *
@@ -248,18 +261,13 @@ async function fetch(url, options) {
     // a few seconds elapse between attempts
     async function fetchWithRetry(url, options, remainingAttempts) {
       try {
-        return baseFetch(url, options);
+        return await baseFetch(url, options);
       }
       catch (err) {
         if (remainingAttempts <= 0) throw err;
-        log('fetch attempt failed');
-        return new Promise((resolve, reject) => {
-          setTimeout(function () {
-            fetchWithRetry(url, options, remainingAttempts - 1)
-              .then(resolve)
-              .catch(reject);
-          }, 2000 + Math.floor(Math.random() * 8000));
-        });
+        log('fetch attempt failed, sleep and try again');
+        await sleep(2000 + Math.floor(Math.random() * 8000));
+        return fetchWithRetry(url, options, remainingAttempts - 1);
       }
     }
 
