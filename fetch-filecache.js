@@ -210,13 +210,9 @@ async function fetch(url, options) {
     log('fetch and save response to cache');
     const headers = {};
     response.headers.forEach((value, header) => headers[header] = value);
-    await fs.writeFile(
-        cacheHeadersFilename,
-        JSON.stringify(headers, null, 2),
-        'utf8');
-    
     let data = await response.text();
     await fs.writeFile(cacheFilename, data, 'utf8');
+    await fs.writeFile(cacheHeadersFilename, JSON.stringify(headers, null, 2), 'utf8');
   }
 
   async function conditionalFetch(prevHeaders) {
