@@ -5,8 +5,9 @@
  * @module fetch-filecache
  */
 
+const crypto = require('crypto');
 const URL = require('url');
-const filenamify = require('filenamify-url');
+const filenamifyUrl = require('filenamify-url');
 const baseFetch = require('node-fetch');
 const Response = require('node-fetch').Response;
 const rimraf = require('rimraf');
@@ -39,6 +40,31 @@ let cacheFolderReset = {};
 
 // Request counter
 let counter = 0;
+
+
+/**
+ * Wrapper around the filenamify library to handle lengthy URLs.
+ *
+ * By default filenamify truncates the result to 100 characters, but that may
+ * not be enough to distinguish between cache entries. When string is too long,
+ * replace the end by an MD5 checksum.
+ *
+ * Note we keep the beginning from filenamify because it remains somewhat human
+ * friendly.
+ *
+ * @function
+ * @param {String} url The URL to convert to a filename
+ * @return {String} A safe filename that is less than 100 characters long
+ */
+function filenamify(url) {
+  let res = filenamifyUrl(url);
+  if (res.length >= 60) {
+    res = res.substr(0, 60) +
+      '-md5-' +
+      crypto.createHash('md5').update(url, 'utf8').digest('hex');
+  }
+  return res;
+}
 
 
 /**

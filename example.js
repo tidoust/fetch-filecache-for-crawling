@@ -7,14 +7,16 @@
 const fetch = require('./');
 
 // URLs to crawl, some of which may be identical
+// The API
 let urls = [
-  'https://caniuse.com/data.json',
-  'https://caniuse.com/data.json'
+  'https://api.github.com/users/tidoust',
+  'https://api.github.com/repos/tidoust/fetch-filecache-for-crawling/issues',
+  'https://api.github.com/users/tidoust',
+  'https://api.github.com/repos/tidoust/fetch-filecache-for-crawling/issues'
 ]
 
 Promise.all(urls.map(url =>
   fetch(url, { logToConsole: true })
     .then(response => response.json())
-    .then(json => console.log(Object.keys(json.data).length +
-      ' entries in Can I Use'))
+    .then(json => console.log('Got some JSON'))
 )).catch(err => console.error(err));
