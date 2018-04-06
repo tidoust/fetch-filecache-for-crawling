@@ -1,5 +1,5 @@
 /**
- * Usage example.
+ * Binary example
  *
  * Run with `node example-binary.js`. This example shows how to use the library
  * to fetch binary content.

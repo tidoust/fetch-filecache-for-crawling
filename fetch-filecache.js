@@ -205,12 +205,12 @@ async function fetch(url, options) {
   async function readFromCache() {
     let data = await fs.readFile(cacheHeadersFilename, 'utf8');
     let headers = JSON.parse(data);
+    let status = headers.status || 200;
+    if (headers.status) {
+      delete headers.status;
+    }
     let readable = fs.createReadStream(cacheFilename);
-    return new Response(readable, {
-      url,
-      status: 200,
-      headers
-    });
+    return new Response(readable, { url, status, headers });
   }
 
   async function saveToCacheIfNeeded(response) {
@@ -224,7 +224,7 @@ async function fetch(url, options) {
     return new Promise((resolve, reject) => {
       let writable = fs.createWriteStream(cacheFilename);
       writable.on('close', _ => {
-        let headers = {};
+        let headers = { status: response.status };
         response.headers.forEach((value, header) => headers[header] = value);
         fs.writeFile(cacheHeadersFilename, JSON.stringify(headers, null, 2), 'utf8')
           .then(resolve).catch(reject);
@@ -235,11 +235,6 @@ async function fetch(url, options) {
   }
 
   async function conditionalFetch(prevHeaders) {
-    if ((prevHeaders && config.avoidNetworkRequests) || fetchedUrls[config.cacheFolder][url]) {
-      log('use cached version directly');
-      return readFromCache();
-    }
-
     options.headers = options.headers || {};
     if (prevHeaders && prevHeaders['last-modified']) {
       options.headers['If-Modified-Since'] = prevHeaders['last-modified'];
@@ -291,7 +286,16 @@ async function fetch(url, options) {
   else {
     addPendingFetch(url);
     try {
+      if (fetchedUrls[config.cacheFolder][url]) {
+        log('URL fetched already, use cached version directly');
+        return readFromCache();
+      }
       let headers = await readHeadersFromCache();
+      if (headers && config.avoidNetworkRequests) {
+        log('avoid network requests, use cached version directly');
+        fetchedUrls[config.cacheFolder][url] = true;
+        return readFromCache();
+      }
       let response = await conditionalFetch(headers);
       fetchedUrls[config.cacheFolder][url] = true;
       resolvePendingFetch(url);
