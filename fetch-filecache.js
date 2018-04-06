@@ -288,12 +288,14 @@ async function fetch(url, options) {
     try {
       if (fetchedUrls[config.cacheFolder][url]) {
         log('URL fetched already, use cached version directly');
+        resolvePendingFetch(url);
         return readFromCache();
       }
       let headers = await readHeadersFromCache();
       if (headers && config.avoidNetworkRequests) {
         log('avoid network requests, use cached version directly');
         fetchedUrls[config.cacheFolder][url] = true;
+        resolvePendingFetch(url);
         return readFromCache();
       }
       let response = await conditionalFetch(headers);
