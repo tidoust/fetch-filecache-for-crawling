@@ -110,6 +110,9 @@ async function fetch(url, options) {
     avoidNetworkRequests: options.hasOwnProperty('avoidNetworkRequests') ?
       options.avoidNetworkRequests :
       globalConfig.avoidNetworkRequests || false,
+    forceRefresh: options.hasOwnProperty('forceRefresh') ?
+      options.forceRefresh :
+      globalConfig.forceRefresh || false,
     logToConsole: options.hasOwnProperty('logToConsole') ?
       options.logToConsole :
       globalConfig.logToConsole || false
@@ -286,13 +289,13 @@ async function fetch(url, options) {
   else {
     addPendingFetch(url);
     try {
-      if (fetchedUrls[config.cacheFolder][url]) {
+      if (fetchedUrls[config.cacheFolder][url] && !config.forceRefresh) {
         log('URL fetched already, use cached version directly');
         resolvePendingFetch(url);
         return readFromCache();
       }
       let headers = await readHeadersFromCache();
-      if (headers && config.avoidNetworkRequests) {
+      if (headers && config.avoidNetworkRequests && !config.forceRefresh) {
         log('avoid network requests, use cached version directly');
         fetchedUrls[config.cacheFolder][url] = true;
         resolvePendingFetch(url);
