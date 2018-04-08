@@ -6,7 +6,7 @@
  * for all subsequent fetches for that URL during that crawl. The forceRefresh
  * options forces the library to send another HTTP request.
  */
-const fetch = require('./');
+const fetch = require('../');
 
 fetch('https://api.github.com/users/tidoust', { logToConsole: true })
   .then(_ => fetch('https://api.github.com/users/tidoust', { logToConsole: true }))

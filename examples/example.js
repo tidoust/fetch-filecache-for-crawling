@@ -4,7 +4,7 @@
  * Run with `node example.js`. This should report some progress info to the
  * console and save files in the "cache" folder
  */
-const fetch = require('./');
+const fetch = require('../');
 
 // URLs to crawl, some of which may be identical
 // The API
