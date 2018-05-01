@@ -15,8 +15,9 @@ let urls = [
   'https://api.github.com/repos/tidoust/fetch-filecache-for-crawling/issues'
 ]
 
+fetch.setConfigParam('logToConsole', true);
 Promise.all(urls.map(url =>
-  fetch(url, { logToConsole: true })
+  fetch(url)
     .then(response => response.json())
     .then(json => console.log('Got some JSON'))
 )).catch(err => console.error(err));

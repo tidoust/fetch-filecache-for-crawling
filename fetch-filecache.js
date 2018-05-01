@@ -29,17 +29,14 @@ catch (e) {
 // fetched them
 const pendingFetches = {};
 
-// The list of URLs that have been fetched (and that exist in the cache) per
-// cache folder during the lifetime of the application. Used as a basic
-// "max-age" mechanism to avoid sending multiple requests to the same URL
-// during a run of the underlying application.
-const fetchedUrls = [];
-
 // Reset the cache folder only once
 let cacheFolderReset = {};
 
 // Request counter
 let counter = 0;
+
+// Launch time
+const launchTime = (new Date()).getTime();
 
 
 /**
@@ -102,21 +99,36 @@ async function fetch(url, options) {
 
   // Specific parameters given in `options` override possible settings read
   // from the `config.json` file.
+  // NB: `avoidNetworkRequests` and `forceRefresh` are deprecated but still
+  // supported. The `refresh` parameter should rather be used.
   const config = {
     cacheFolder: options.cacheFolder || globalConfig.cacheFolder || '.cache',
     resetCache: options.hasOwnProperty('resetCache') ?
       options.resetCache :
       globalConfig.resetCache || false,
-    avoidNetworkRequests: options.hasOwnProperty('avoidNetworkRequests') ?
-      options.avoidNetworkRequests :
-      globalConfig.avoidNetworkRequests || false,
-    forceRefresh: options.hasOwnProperty('forceRefresh') ?
-      options.forceRefresh :
-      globalConfig.forceRefresh || false,
+    refresh: 'default',
     logToConsole: options.hasOwnProperty('logToConsole') ?
       options.logToConsole :
       globalConfig.logToConsole || false
   };
+  if (options.hasOwnProperty('avoidNetworkRequests')) {
+    config.refresh = (options.avoidNetworkRequests ? 'never' : config.refresh);
+  }
+  else if (globalConfig.hasOwnProperty('avoidNetworkRequests')) {
+    config.refresh = (globalConfig.avoidNetworkRequests ? 'never' : config.refresh);
+  }
+  if (options.hasOwnProperty('forceRefresh')) {
+    config.refresh = (options.forceRefresh ? 'force' : config.refresh);
+  }
+  else if (globalConfig.hasOwnProperty('forceRefresh')) {
+    config.refresh = (globalConfig.forceRefresh ? 'force' : config.refresh);
+  }
+  if (options.hasOwnProperty('refresh')) {
+    config.refresh = options.refresh;
+  }
+  else if (globalConfig.hasOwnProperty('refresh')) {
+    config.refresh = globalConfig.refresh;
+  }
 
   const cacheFilename = path.join(config.cacheFolder, filenamify(url));
   const cacheHeadersFilename = cacheFilename + '.headers';
@@ -125,12 +137,109 @@ async function fetch(url, options) {
     cacheFolderReset[config.cacheFolder] = true;
     await rimraf(config.cacheFolder + '/*');
   }
-  fetchedUrls[config.cacheFolder] = fetchedUrls[config.cacheFolder] || [];
 
   function log(msg) {
     if (!config.logToConsole) return;
     console.log(requestId + ' - ' + msg);
   }
+
+  /**
+   * Look at HTTP headers, current time and refresh strategy to determine whether
+   * cached content has expired
+   *
+   * @function
+   * @param {Object} headers HTTP headers received last time
+   * @param {String|Integer} refresh Refresh strategy
+   * @return {Boolean} true if cached content has expired (or does not exist),
+   *   false when it can still be returned.
+   */
+  function hasExpired(headers, refresh) {
+    if (!headers) {
+      log('response is not in cache');
+      return true;
+    }
+    if (refresh === 'force') {
+      log('response in cache but refresh requested');
+      return true;
+    }
+    if (refresh === 'never') {
+      log('response in cache and considered to be always valid');
+      return false;
+    }
+
+    let received = new Date(
+      headers.received || headers.date || 'Jan 1, 1970, 00:00:00.000 GMT');
+    received = received.getTime();
+    if (refresh === 'once') {
+      if (received < launchTime) {
+        log('response in cache but one refresh requested');
+        return true;
+      }
+      else {
+        log('response in cache and already refreshed once')
+        return false;
+      }
+    }
+
+    let now = Date.now();
+    if (Number.isInteger(refresh)) {
+      if (received + refresh * 1000 < now) {
+        log('response in cache is older than requested duration');
+        return true;
+      }
+      else {
+        log('response in cache is fresh enough for requested duration');
+        return false;
+      }
+    }
+
+    // Apply HTTP expiration rules otherwise
+    if (headers.expires) {
+      try {
+        let expires = (new Date(headers.expires)).getTime();
+        if (expires < now) {
+          log('response in cache has expired');
+          return true;
+        }
+        else {
+          log('response in cache is still valid');
+          return false;
+        }
+      }
+      catch (err) {}
+    }
+
+    if (headers['cache-control']) {
+      try {
+        let tokens = headers['cache-control'].split(',')
+          .map(token => token.split('='));
+        for (token of tokens) {
+          let param = token[0].trim();
+          if (param === 'no-cache') {
+            log('response in cache but no-cache directive');
+            return true;
+          }
+          else if (param === 'max-age') {
+            let maxAge = parseInt(token[1], 10);
+            if (received + maxAge * 1000 < now) {
+              log('response in cache has expired');
+              return true;
+            }
+            else {
+              log('response in cache is still valid');
+              return false;
+            }
+          }
+        }
+      }
+      catch (err) {}
+    }
+
+    // Cannot tell? Let's refresh the cache
+    log('response in cache and not clear about refresh strategy');
+    return true;
+  }
+
 
   async function checkCacheFolder() {
     try {
@@ -212,14 +321,30 @@ async function fetch(url, options) {
     if (headers.status) {
       delete headers.status;
     }
+    if (headers.received) {
+      delete headers.received;
+    }
     let readable = fs.createReadStream(cacheFilename);
     return new Response(readable, { url, status, headers });
   }
 
-  async function saveToCacheIfNeeded(response) {
+  async function saveToCacheIfNeeded(response, prevHeaders) {
     // Not needed if response is the one we have in cache
+    // (but we'll still update the "received" date if we can to note that we
+    // checked the cache entry)
     if (response.status === 304) {
-      log('response in cache is still valid');
+      log('response in cache was still valid');
+      prevHeaders.received = (new Date()).toUTCString();
+      response.headers.forEach((value, header) => {
+        if ((header === 'expires') || (header === 'cache-control') || (header === 'date')) {
+          prevHeaders[header] = value;
+        }
+      });
+      try {
+        await fs.writeFile(cacheHeadersFilename, JSON.stringify(prevHeaders, null, 2), 'utf8');
+      }
+      catch (err) {
+      }
       return;
     }
 
@@ -227,7 +352,7 @@ async function fetch(url, options) {
     return new Promise((resolve, reject) => {
       let writable = fs.createWriteStream(cacheFilename);
       writable.on('close', _ => {
-        let headers = { status: response.status };
+        let headers = { status: response.status, received: (new Date()).toUTCString() };
         response.headers.forEach((value, header) => headers[header] = value);
         fs.writeFile(cacheHeadersFilename, JSON.stringify(headers, null, 2), 'utf8')
           .then(resolve).catch(reject);
@@ -248,7 +373,7 @@ async function fetch(url, options) {
 
     if (options.headers['If-Modified-Since'] ||
         options.headers['If-None-Match']) {
-      log('response in cache, send conditional request');
+      log('send conditional request');
     }
     else {
       log('send regular request');
@@ -270,9 +395,8 @@ async function fetch(url, options) {
     }
 
     let response = await fetchWithRetry(url, options, 3);
-    await saveToCacheIfNeeded(response);
+    await saveToCacheIfNeeded(response, prevHeaders);
 
-    log('return response from cache');
     return readFromCache();
   }
 
@@ -289,22 +413,16 @@ async function fetch(url, options) {
   else {
     addPendingFetch(url);
     try {
-      if (fetchedUrls[config.cacheFolder][url] && !config.forceRefresh) {
-        log('URL fetched already, use cached version directly');
-        resolvePendingFetch(url);
-        return readFromCache();
-      }
       let headers = await readHeadersFromCache();
-      if (headers && config.avoidNetworkRequests && !config.forceRefresh) {
-        log('avoid network requests, use cached version directly');
-        fetchedUrls[config.cacheFolder][url] = true;
+      if (hasExpired(headers, config.refresh)) {
+        let response = await conditionalFetch(headers);
+        resolvePendingFetch(url);
+        return response;
+      }
+      else {
         resolvePendingFetch(url);
         return readFromCache();
       }
-      let response = await conditionalFetch(headers);
-      fetchedUrls[config.cacheFolder][url] = true;
-      resolvePendingFetch(url);
-      return response;
     }
     catch (err) {
       rejectPendingFetch(url, err);
@@ -314,3 +432,6 @@ async function fetch(url, options) {
 }
 
 module.exports = fetch;
+module.exports.setConfigParam = function (name, value) {
+  globalConfig[name] = value;
+}
