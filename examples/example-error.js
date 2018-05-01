@@ -6,7 +6,7 @@
  */
 const fetch = require('../');
 
-fetch.setConfigParam('logToConsole', true);
+fetch.setParameter('logToConsole', true);
 fetch('https://www.w3.org/404')
   .then(response => console.log(`HTTP response status: ${response.status}`))
   .then(_ => fetch('https://www.w3.org/404'))

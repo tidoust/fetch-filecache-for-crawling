@@ -15,12 +15,11 @@ const path = require('path');
 const promisifyRequire = require('promisify-require');
 const fs = promisifyRequire('fs');
 
-let globalConfig = null;
-try {
-  globalConfig = require(path.resolve('config.json'));
-}
-catch (e) {
-  globalConfig = {};
+let globalConfig = {
+  cacheFolder: '.cache',
+  resetCache: false,
+  refresh: 'default',
+  logToConsole: false
 };
 
 
@@ -102,32 +101,23 @@ async function fetch(url, options) {
   // NB: `avoidNetworkRequests` and `forceRefresh` are deprecated but still
   // supported. The `refresh` parameter should rather be used.
   const config = {
-    cacheFolder: options.cacheFolder || globalConfig.cacheFolder || '.cache',
+    cacheFolder: options.cacheFolder || globalConfig.cacheFolder,
     resetCache: options.hasOwnProperty('resetCache') ?
       options.resetCache :
-      globalConfig.resetCache || false,
-    refresh: 'default',
+      globalConfig.resetCache,
+    refresh: globalConfig.refresh,
     logToConsole: options.hasOwnProperty('logToConsole') ?
       options.logToConsole :
-      globalConfig.logToConsole || false
+      globalConfig.logToConsole
   };
   if (options.hasOwnProperty('avoidNetworkRequests')) {
     config.refresh = (options.avoidNetworkRequests ? 'never' : config.refresh);
   }
-  else if (globalConfig.hasOwnProperty('avoidNetworkRequests')) {
-    config.refresh = (globalConfig.avoidNetworkRequests ? 'never' : config.refresh);
-  }
   if (options.hasOwnProperty('forceRefresh')) {
     config.refresh = (options.forceRefresh ? 'force' : config.refresh);
   }
-  else if (globalConfig.hasOwnProperty('forceRefresh')) {
-    config.refresh = (globalConfig.forceRefresh ? 'force' : config.refresh);
-  }
   if (options.hasOwnProperty('refresh')) {
     config.refresh = options.refresh;
-  }
-  else if (globalConfig.hasOwnProperty('refresh')) {
-    config.refresh = globalConfig.refresh;
   }
 
   const cacheFilename = path.join(config.cacheFolder, filenamify(url));
@@ -432,6 +422,6 @@ async function fetch(url, options) {
 }
 
 module.exports = fetch;
-module.exports.setConfigParam = function (name, value) {
+module.exports.setParameter = function (name, value) {
   globalConfig[name] = value;
 }

@@ -22,7 +22,7 @@ async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-fetch.setConfigParam('logToConsole', true);
+fetch.setParameter('logToConsole', true);
 fetch('https://api.github.com/users/tidoust', { refresh: 'once' })
   .then(_ => fetch('https://api.github.com/users/tidoust', { refresh: 'default' }))
   .then(_ => fetch('https://api.github.com/users/tidoust', { refresh: 'force' }))

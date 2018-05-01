@@ -57,8 +57,6 @@ passed to `fetch` in the `options` parameter to change default behavior:
   - `once`: Fetch the URL at least once, but consider the cached entry to then be valid throughout the lifetime of the application
   - `never`: Always consider that the content in the cache is valid
   - an integer: Consider that cache entries are valid for the given period of time (in seconds)
-- `avoidNetworkRequests`: set to `true` to consider that responses in the cache folder are always valid when they exist. Defaults to `false`, which means that the method will send a conditional HTTP request to check whether the response in the cache is still valid.
-- `forceRefresh`: set to `true` to force another network fetch on a URL that has already been fetched during this crawl. This can be particularly useful when a fetch returns a temporary HTTP error if you want to try again later on. Defaults to `false`, meaning that, during the lifetime of an application, the response in the cache is automatically returned when the underlying URL has already been fetched.
 - `logToConsole`: set to `true` to output progress messages to the console. Defaults to `false`. All messages start with the ID of the request to be able to distinguish between them.
 
 For instance, you may do:
@@ -73,9 +71,7 @@ fetch('https://www.w3.org/', {
 }).then(response => {});
 ```
 
-If a `config.json` file exists in the current folder, the code will try to parse it as JSON and will look for the above parameters in that file. Configuration parameters provided in the `options` parameter take precedence over those defined in `config.json`.
-
-Configuration parameters may also be passed programmatically by calling `fetch.setConfigParam(name, value)` where `name` is the name of the parameter to set and `value` the value to set it to. Calling this method overrides the configuration parameters defined in `config.json` (but the `options` parameters still takes precedence).
+Configuration parameters may also be set for all requests programmatically by calling `fetch.setParameter(name, value)` where `name` is the name of the parameter to set and `value` the value to set it to. Note parameters passed in `options` take precedence).
 
 ## Licensing
 
