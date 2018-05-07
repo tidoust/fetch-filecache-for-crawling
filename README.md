@@ -10,16 +10,20 @@ package is mostly intended to ease reuse by a couple of specific projects.
 Typically, the module is intended to be used for crawling purpose and makes the
 following assumptions, which do not hold true in other cases:
 
-1. Throughout the application's lifetime, info in the cache should always be
-considered valid. In other words a second fetch on the same URL will always
-return the content from the cache, and will not lead to a second request on the
-network. That assumption would obviously false if the goal is to load a resource
-that changes in real-time. The code keeps the list of fetched URLs in memory
-for that purpose (list that keeps growing and that could thus be considered as
-a memory leak if the application was to run forever).
-2. The user wants to preserve cached files in a folder, even after the
+1. The user is only interested in GET requests (although this will be fixed,
+see [#3](https://github.com/tidoust/fetch-filecache-for-crawling/issues/3))
+2. The HTTP headers sent with the request do not matter for the response
+(although this will be fixed as well, see
+[#3](https://github.com/tidoust/fetch-filecache-for-crawling/issues/3))
+3. The user wants to preserve cached files in a folder, even after the
 application is done running. That file cache will be used upon next run of the
 application to send conditional requests.
+4. The user will want to control the cache expiration strategy, through the
+`refresh` parameter. By default, the cache follows HTTP expiration rules but
+setting the parameter to e.g. `once` will make the cache behave completely
+differently. The ability to tweak that behavior is the module's main added
+value!
+
 
 ## Installation
 

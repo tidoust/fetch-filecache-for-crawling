@@ -226,7 +226,7 @@ async function fetch(url, options) {
     }
 
     // Cannot tell? Let's refresh the cache
-    log('response in cache and not clear about refresh strategy');
+    log('response in cache has expired (no explicit directive)');
     return true;
   }
 
