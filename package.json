@@ -1,6 +1,6 @@
 {
   "name": "fetch-filecache-for-crawling",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "description": "Implementation of a `fetch` that extends the implementation from `node-fetch` to add an HTTP cache using a local cache folder for crawling purpose.",
   "main": "fetch-filecache.js",
   "repository": {
