@@ -265,7 +265,7 @@ async function fetch(url, options) {
   }
 
   /**
-   * Create a pending fetch promise and keep controls over that promise so that
+   * Create a pending fetch promise and keep control over that promise so that
    * the code may resolve or reject it through calls to resolvePendingFetch and
    * rejectPendingFetch functions
    */
@@ -277,6 +277,11 @@ async function fetch(url, options) {
       reject = innerReject;
     });
     pendingFetches[url] = { promise, resolve, reject };
+
+    // Make sure that we catch rejection (in case no one is actually looking
+    // for this URL at the same time, otherwise Node.js will complain with an
+    // "UnhandledPromiseRejectionWarning" message)
+    promise.catch(err => {});
   }
 
   function resolvePendingFetch(url) {
@@ -376,10 +381,10 @@ async function fetch(url, options) {
         return await baseFetch(url, options);
       }
       catch (err) {
-        if (remainingAttempts <= 0) throw err;
+        if ((err.name === 'AbortError') || (remainingAttempts <= 0)) throw err;
         log('fetch attempt failed, sleep and try again');
         await sleep(2000 + Math.floor(Math.random() * 8000));
-        return fetchWithRetry(url, options, remainingAttempts - 1);
+        return await fetchWithRetry(url, options, remainingAttempts - 1);
       }
     }
 
@@ -409,7 +414,7 @@ async function fetch(url, options) {
         return response;
       }
       else {
-        resolvePendingFetch(url);
+        resolvePendingFetch(url, 'test');
         return readFromCache();
       }
     }
