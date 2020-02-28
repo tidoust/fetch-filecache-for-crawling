@@ -12,8 +12,7 @@ const baseFetch = require('node-fetch');
 const Response = require('node-fetch').Response;
 const rimraf = require('rimraf');
 const path = require('path');
-const promisifyRequire = require('promisify-require');
-const fs = promisifyRequire('fs');
+const fs = require('fs');
 
 let globalConfig = {
   cacheFolder: '.cache',
@@ -233,7 +232,7 @@ async function fetch(url, options) {
 
   async function checkCacheFolder() {
     try {
-      let stat = await fs.stat(config.cacheFolder);
+      let stat = await fs.promises.stat(config.cacheFolder);
       if (!stat.isDirectory()) {
         throw new Error('Looking for a cache folder but found a cache file instead');
       }
@@ -244,7 +243,7 @@ async function fetch(url, options) {
         throw err;
       }
       try {
-        await fs.mkdir(config.cacheFolder);
+        await fs.promises.mkdir(config.cacheFolder);
       }
       catch (mkerr) {
         // Someone may have created the folder in the meantime
@@ -294,7 +293,7 @@ async function fetch(url, options) {
 
   async function readHeadersFromCache() {
     try {
-      let data = await fs.readFile(cacheHeadersFilename);
+      let data = await fs.promises.readFile(cacheHeadersFilename);
       let headers = JSON.parse(data, 'utf8');
       return headers;
     }
@@ -305,7 +304,7 @@ async function fetch(url, options) {
   }
 
   async function readFromCache() {
-    let data = await fs.readFile(cacheHeadersFilename, 'utf8');
+    let data = await fs.promises.readFile(cacheHeadersFilename, 'utf8');
     let headers = JSON.parse(data);
     let status = headers.status || 200;
     if (headers.status) {
@@ -331,7 +330,7 @@ async function fetch(url, options) {
         }
       });
       try {
-        await fs.writeFile(cacheHeadersFilename, JSON.stringify(prevHeaders, null, 2), 'utf8');
+        await fs.promises.writeFile(cacheHeadersFilename, JSON.stringify(prevHeaders, null, 2), 'utf8');
       }
       catch (err) {
       }
@@ -344,7 +343,7 @@ async function fetch(url, options) {
       writable.on('close', _ => {
         let headers = { status: response.status, received: (new Date()).toUTCString() };
         response.headers.forEach((value, header) => headers[header] = value);
-        fs.writeFile(cacheHeadersFilename, JSON.stringify(headers, null, 2), 'utf8')
+        fs.promises.writeFile(cacheHeadersFilename, JSON.stringify(headers, null, 2), 'utf8')
           .then(resolve).catch(reject);
       });
       writable.on('error', reject);
