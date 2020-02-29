@@ -254,13 +254,17 @@ async function fetch(url, options) {
     }
   }
 
-  async function getPendingFetch() {
+  function isFetchPending() {
+    return !!pendingFetches[url];
+  }
+
+  async function pendingFetchIsOver() {
     if (pendingFetches[url]) {
       log('wait for pending request');
-      return pendingFetches[url].promise;
+      await pendingFetches[url].promise;
     }
     else {
-      return false;
+      throw new Error('There was no pending request');
     }
   }
 
@@ -269,7 +273,7 @@ async function fetch(url, options) {
    * the code may resolve or reject it through calls to resolvePendingFetch and
    * rejectPendingFetch functions
    */
-  function addPendingFetch(url) {
+  function addPendingFetch() {
     let resolve = null;
     let reject = null;
     let promise = new Promise((innerResolve, innerReject) => {
@@ -284,13 +288,13 @@ async function fetch(url, options) {
     promise.catch(err => {});
   }
 
-  function resolvePendingFetch(url) {
+  function resolvePendingFetch() {
     if (!pendingFetches[url]) return;
     pendingFetches[url].resolve(true);
     delete pendingFetches[url];
   }
 
-  function rejectPendingFetch(url, err) {
+  function rejectPendingFetch(err) {
     if (!pendingFetches[url]) return;
     pendingFetches[url].reject(err);
     delete pendingFetches[url];
@@ -396,30 +400,31 @@ async function fetch(url, options) {
 
   log('fetch ' + url);
   await checkCacheFolder();
-  let pendingFetchWasOngoing = await getPendingFetch();
-  if (pendingFetchWasOngoing) {
-    // There was a pending fetch, reuse the cached answer
-    // (NB: we would not be able to reuse the Response object directly because
+  if (isFetchPending()) {
+    // There is a pending fetch, wait for that fetch to finish and reuse the
+    // cached answer (NB: we cannot reuse the Response object directly because
     // response body stream can only be read once)
+    let pendingFetch = await pendingFetchIsOver();
+
     log('pending request over, return response from cache');
     return readFromCache();
   }
   else {
-    addPendingFetch(url);
+    addPendingFetch();
     try {
       let headers = await readHeadersFromCache();
       if (hasExpired(headers, config.refresh)) {
         let response = await conditionalFetch(headers);
-        resolvePendingFetch(url);
+        resolvePendingFetch();
         return response;
       }
       else {
-        resolvePendingFetch(url, 'test');
+        resolvePendingFetch();
         return readFromCache();
       }
     }
     catch (err) {
-      rejectPendingFetch(url, err);
+      rejectPendingFetch(err);
       throw err;
     }
   }
