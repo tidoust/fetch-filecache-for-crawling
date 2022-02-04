@@ -94,6 +94,7 @@ async function fetch(url, options) {
   // Increment request counter and save it locally for logging purpose
   counter += 1;
   let requestId = counter;
+  let isRequestCacheAware = false;
 
   // Specific parameters given in `options` override possible settings read
   // from the `config.json` file.
@@ -117,6 +118,11 @@ async function fetch(url, options) {
   }
   if (options.hasOwnProperty('refresh')) {
     config.refresh = options.refresh;
+  }
+  // The request being processed comes frome a cache-aware agent
+  // 304 should be sent back transparently in that case
+  if (options.headers['If-Modified-Since'] || options.headers['If-None-Match']) {
+    isRequestCacheAware = true;
   }
 
   const cacheFilename = path.join(config.cacheFolder, filenamify(url));
@@ -362,10 +368,10 @@ async function fetch(url, options) {
 
   async function conditionalFetch(prevHeaders) {
     options.headers = options.headers || {};
-    if (prevHeaders && prevHeaders['last-modified']) {
+    if (prevHeaders && prevHeaders['last-modified'] && !isRequestCacheAware) {
       options.headers['If-Modified-Since'] = prevHeaders['last-modified'];
     }
-    if (prevHeaders && prevHeaders.etag) {
+    if (prevHeaders && prevHeaders.etag  && !isRequestCacheAware) {
       options.headers['If-None-Match'] = prevHeaders.etag;
     }
 
@@ -394,7 +400,9 @@ async function fetch(url, options) {
 
     let response = await fetchWithRetry(url, options, 3);
     await saveToCacheIfNeeded(response, prevHeaders);
-
+    if (isRequestCacheAware && response.status === 304) {
+      return response;
+    }
     return readFromCache();
   }
 
