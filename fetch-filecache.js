@@ -74,6 +74,76 @@ async function sleep(ms) {
 }
 
 
+/**
+ * Return the value of the given HTTP header
+ *
+ * The function performs a case-insensitive search for the request HTTP header
+ * name in the given list of HTTP headers.
+ *
+ * @function
+ * @param {Object} headers HTTP headers
+ * @param {string} name HTTP header name to look for
+ * @return {string} HTTP header value or null if header is not set.
+ */
+function getHeaderValue(headers, name) {
+  if (!headers) {
+    return null;
+  }
+  const lname = name.toLowerCase();
+  const key = Object.keys(headers).find(h => h.toLowerCase() === lname);
+  return key ? headers[key] : null;
+}
+
+
+/**
+ * Return true if a 304 response should be returned, false otherwise
+ *
+ * The function is loosely adapted from:
+ * https://github.com/http-party/http-server/blob/cf17c2fe97342f6a268bfb8fc79a2b82464c4d25/lib/core/index.js#L135
+ * Copyright (c) 2011-2021 Charlie Robbins, Marak Squires, Jade Michael Thornton and the Contributors.
+ * Published under an MIT license: https://github.com/http-party/http-server/blob/master/LICENSE
+ *
+ * Adaptation includes giving priority to If-None-Match over If-Modified-Since
+ * (per the HTTP spec), and handling list of values in If-None-Match header.
+ *
+ * @function
+ * @param {Array<string>} requestHeaders Request headers (case-insensitive)
+ * @param {Array<string>} responseHeaders Headers from fetch response or cache (all lower-case)
+ * @return {boolean} true when a 304 could be returned, false otherwise
+ */
+function shouldReturn304(requestHeaders, responseHeaders) {
+  const requestEtags = (getHeaderValue(requestHeaders, 'If-None-Match') ?? '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(value => !!value);
+  if (requestEtags.length > 0) {
+    const responseEtag = responseHeaders['etag'] ?? '';
+    return !!requestEtags.find(etag =>
+      (etag === responseEtag) ||
+      (etag === `W/${responseEtag}`) ||
+      (`W/${etag}` === responseEtag));
+  }
+
+  const requestKnownDate = getHeaderValue(requestHeaders, 'If-Modified-Since');
+  if (requestKnownDate) {
+    let knownDate;
+    // Catch "illegal access" dates that will crash v8
+    try {
+      knownDate = new Date(Date.parse(requestKnownDate));
+    } catch (err) {
+      return false;
+    }
+    if (knownDate.toString() === 'Invalid Date') {
+      return false;
+    }
+    // If the client's copy is older than the server's, don't return 304
+    return (knownDate >= new Date(responseHeaders['last-modified']));
+  }
+
+  return false;
+}
+
+
 
 /**
  * Wrapper around the baseFetch function that returns the response from the
@@ -89,12 +159,15 @@ async function sleep(ms) {
  * @return {Promise<Response>} The promise to get an HTTP response
  */
 async function fetch(url, options) {
-  options = options || {};
+  // We may modify request options in place, let's make a shallow copy
+  options = Object.assign({}, options);
+  if (options.headers) {
+    options.headers = Object.assign({}, options.headers);
+  }
 
   // Increment request counter and save it locally for logging purpose
   counter += 1;
   let requestId = counter;
-  let isRequestCacheAware = false;
 
   // Specific parameters given in `options` override possible settings read
   // from the `config.json` file.
@@ -119,11 +192,11 @@ async function fetch(url, options) {
   if (options.hasOwnProperty('refresh')) {
     config.refresh = options.refresh;
   }
-  // The request being processed comes frome a cache-aware agent
-  // 304 should be sent back transparently in that case
-  if (options.headers['If-Modified-Since'] || options.headers['If-None-Match']) {
-    isRequestCacheAware = true;
-  }
+  // Requesting agent may be cache-aware, in which case we will return a 304
+  // when resource has not been modified.
+  const isRequestCacheAware =
+    getHeaderValue(options.headers, 'If-None-Match') ||
+    getHeaderValue(options.headers, 'If-Modified-Since');
 
   const cacheFilename = path.join(config.cacheFolder, filenamify(url));
   const cacheHeadersFilename = cacheFilename + '.headers';
@@ -328,6 +401,15 @@ async function fetch(url, options) {
     if (headers.received) {
       delete headers.received;
     }
+    if (isRequestCacheAware && shouldReturn304(options.headers, headers)) {
+      // Only keep useful headers for 304 response, see:
+      // https://httpwg.org/specs/rfc7232.html#status.304
+      const toDelete = Object.keys(headers).filter(header =>
+        !['cache-control', 'content-location', 'date', 'etag',
+          'expires', 'last-modified', 'vary'].includes(header));
+      toDelete.forEach(header => delete headers[header]);
+      return new Response(null, { url, status: 304, headers });
+    }
     let readable = fs.createReadStream(cacheFilename);
     return new Response(readable, { url, status, headers });
   }
@@ -337,19 +419,25 @@ async function fetch(url, options) {
     // (but we'll still update the "received" date if we can to note that we
     // checked the cache entry)
     if (response.status === 304) {
-      log('response in cache was still valid');
-      prevHeaders.received = (new Date()).toUTCString();
-      response.headers.forEach((value, header) => {
-        if ((header === 'expires') || (header === 'cache-control') || (header === 'date')) {
-          prevHeaders[header] = value;
+      if (!prevHeaders) {
+        log('response is not in cache but client has it');
+        return false;
+      }
+      else {
+        log('response in cache is still valid');
+        prevHeaders.received = (new Date()).toUTCString();
+        response.headers.forEach((value, header) => {
+          if ((header === 'expires') || (header === 'cache-control') || (header === 'date')) {
+            prevHeaders[header] = value;
+          }
+        });
+        try {
+          await fs.promises.writeFile(cacheHeadersFilename, JSON.stringify(prevHeaders, null, 2), 'utf8');
         }
-      });
-      try {
-        await fs.promises.writeFile(cacheHeadersFilename, JSON.stringify(prevHeaders, null, 2), 'utf8');
+        catch (err) {
+        }
+        return true;
       }
-      catch (err) {
-      }
-      return;
     }
 
     log('fetch and save response to cache');
@@ -359,7 +447,7 @@ async function fetch(url, options) {
         let headers = { status: response.status, received: (new Date()).toUTCString() };
         response.headers.forEach((value, header) => headers[header] = value);
         fs.promises.writeFile(cacheHeadersFilename, JSON.stringify(headers, null, 2), 'utf8')
-          .then(resolve).catch(reject);
+          .then(_ => resolve(true)).catch(reject);
       });
       writable.on('error', reject);
       response.body.pipe(writable);
@@ -371,12 +459,11 @@ async function fetch(url, options) {
     if (prevHeaders && prevHeaders['last-modified'] && !isRequestCacheAware) {
       options.headers['If-Modified-Since'] = prevHeaders['last-modified'];
     }
-    if (prevHeaders && prevHeaders.etag  && !isRequestCacheAware) {
+    if (prevHeaders && prevHeaders.etag && !isRequestCacheAware) {
       options.headers['If-None-Match'] = prevHeaders.etag;
     }
-
-    if (options.headers['If-Modified-Since'] ||
-        options.headers['If-None-Match']) {
+    if (getHeaderValue(options.headers, 'If-Modified-Since') ||
+        getHeaderValue(options.headers, 'If-None-Match')) {
       log('send conditional request');
     }
     else {
@@ -399,11 +486,17 @@ async function fetch(url, options) {
     }
 
     let response = await fetchWithRetry(url, options, 3);
-    await saveToCacheIfNeeded(response, prevHeaders);
-    if (isRequestCacheAware && response.status === 304) {
+    const inCache = await saveToCacheIfNeeded(response, prevHeaders);
+    if (inCache) {
+      return readFromCache();
+    }
+    else {
+      // This happens when agent set an If-None-Match or If-Modified-Since
+      // header, server returned a 304, and we don't yet have the resource in
+      // the file cache. Let's just transparently pass the response over to the
+      // agent.
       return response;
     }
-    return readFromCache();
   }
 
   log('fetch ' + url);
