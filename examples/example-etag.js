@@ -10,11 +10,10 @@ const fetch = require('../');
 fetch.setParameter('logToConsole', true);
 
 async function run() {
-  const etag = '"5421-55a8e11cc2280"';
+  const etag = '"5421-55a8e11cc2280-gzip"';
   console.log(`Fetch https://www.w3.org/TR/2012/REC-hr-time-20121217/ with etag ${etag}`);
   let resp = await fetch('https://www.w3.org/TR/2012/REC-hr-time-20121217/', {
-    refresh: 'once', // Needed because of invalid cache semantics in W3C servers
-    compress: false,
+    refresh: 'once',
     headers: {
       'If-None-Match': etag
     }
@@ -24,8 +23,7 @@ async function run() {
   console.log();
   console.log(`Put https://www.w3.org/TR/2012/REC-hr-time-20121217/ in file cache if needed`);
   resp = await fetch('https://www.w3.org/TR/2012/REC-hr-time-20121217/', {
-    refresh: 'force',
-    compress: false,
+    refresh: 'force'
   });
   console.log(`Received HTTP status ${resp.status} with etag ${resp.headers.get('etag')}`)
 
