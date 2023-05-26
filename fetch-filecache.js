@@ -8,8 +8,6 @@
 const crypto = require('crypto');
 const URL = require('url');
 const filenamifyUrl = require('filenamify-url');
-const baseFetch = require('node-fetch');
-const Response = require('node-fetch').Response;
 const rimraf = require('rimraf');
 const path = require('path');
 const fs = require('fs');
@@ -158,7 +156,7 @@ function shouldReturn304(requestHeaders, responseHeaders) {
  *   send along with the request.
  * @return {Promise<Response>} The promise to get an HTTP response
  */
-async function fetch(url, options) {
+async function cacheFetch(url, options) {
   // We may modify request options in place, let's make a shallow copy
   options = Object.assign({}, options);
   if (options.headers) {
@@ -441,7 +439,7 @@ async function fetch(url, options) {
     }
 
     log('fetch and save response to cache');
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       let writable = fs.createWriteStream(cacheFilename);
       writable.on('close', _ => {
         let headers = { status: response.status, received: (new Date()).toUTCString() };
@@ -450,7 +448,17 @@ async function fetch(url, options) {
           .then(_ => resolve(true)).catch(reject);
       });
       writable.on('error', reject);
-      response.body.pipe(writable);
+      const reader = response.body.getReader();
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) {
+          writable.close();
+          break;
+        }
+        else {
+          writable.write(chunk.value);
+        }
+      }
     });
   }
 
@@ -475,7 +483,7 @@ async function fetch(url, options) {
     // a few seconds elapse between attempts
     async function fetchWithRetry(url, options, remainingAttempts) {
       try {
-        return await baseFetch(url, options);
+        return await fetch(url, options);
       }
       catch (err) {
         if ((err.name === 'AbortError') || (remainingAttempts <= 0)) throw err;
@@ -531,7 +539,7 @@ async function fetch(url, options) {
   }
 }
 
-module.exports = fetch;
+module.exports = cacheFetch;
 module.exports.setParameter = function (name, value) {
   globalConfig[name] = value;
 }
