@@ -8,7 +8,7 @@
 const crypto = require('crypto');
 const URL = require('url');
 const filenamifyUrl = require('filenamify-url');
-const rimraf = require('rimraf');
+const { rimraf } = require('rimraf');
 const path = require('path');
 const fs = require('fs');
 
@@ -201,7 +201,7 @@ async function cacheFetch(url, options) {
 
   if (config.resetCache && !cacheFolderReset[config.cacheFolder]) {
     cacheFolderReset[config.cacheFolder] = true;
-    await rimraf(config.cacheFolder + '/*');
+    await rimraf(config.cacheFolder + '/*', { glob: true });
   }
 
   function log(msg) {
