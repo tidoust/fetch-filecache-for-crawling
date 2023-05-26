@@ -1,7 +1,7 @@
 # Implementation of fetch with a file-based HTTP cache for crawling purpose
 
 Node.js module that exports a `fetch` function that extends the implementation
-from `node-fetch` to add an HTTP cache using a local cache folder.
+of Node.js native `fetch` to add an HTTP cache using a local cache folder.
 
 The code was developed for a particular scenario with specific requirements in
 mind, and no attempts were made to generalize them. Publication as an npm
@@ -27,7 +27,7 @@ value!
 
 ## Installation
 
-Run `npm install fetch-filecache-for-crawling`
+Run `npm install fetch-filecache-for-crawling`.
 
 ## Usage
 
