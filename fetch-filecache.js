@@ -409,6 +409,9 @@ async function cacheFetch(url, options) {
       return new Response(null, { url, status: 304, headers });
     }
     let readable = fs.createReadStream(cacheFilename);
+    // Indicate this is coming from the cache via
+    // https://www.rfc-editor.org/rfc/rfc9211.html
+    headers["cache-status"] = "fetch-filecache-for-crawling; hit";
     return new Response(readable, { url, status, headers });
   }
 
