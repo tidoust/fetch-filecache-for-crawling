@@ -389,7 +389,7 @@ async function cacheFetch(url, options) {
     }
   }
 
-  async function readFromCache() {
+  async function readFromCache(hit = false) {
     let data = await fs.promises.readFile(cacheHeadersFilename, 'utf8');
     let headers = JSON.parse(data);
     let status = headers.status || 200;
@@ -409,9 +409,11 @@ async function cacheFetch(url, options) {
       return new Response(null, { url, status: 304, headers });
     }
     let readable = fs.createReadStream(cacheFilename);
-    // Indicate this is coming from the cache via
-    // https://www.rfc-editor.org/rfc/rfc9211.html
-    headers["cache-status"] = "fetch-filecache-for-crawling; hit";
+    if (hit) {
+      // Indicate this is coming from the cache via
+      // https://www.rfc-editor.org/rfc/rfc9211.html
+      headers["cache-status"] = "fetch-filecache-for-crawling; hit";
+    }
     return new Response(readable, { url, status, headers });
   }
 
@@ -532,7 +534,7 @@ async function cacheFetch(url, options) {
       }
       else {
         resolvePendingFetch();
-        return readFromCache();
+        return readFromCache(true);
       }
     }
     catch (err) {
