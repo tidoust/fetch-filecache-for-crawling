@@ -20,6 +20,6 @@
   },
   "dependencies": {
     "filenamify-url": "^2.1.2",
-    "rimraf": "^5.0.1"
+    "rimraf": "^6.0.0"
   }
 }
